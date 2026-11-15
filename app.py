@@ -134,20 +134,17 @@ def render_bundle_grid(res, cols_n: int = 14, thumb_w: int = 56) -> None:
 
 
 def render_detail(res, bundle) -> None:
-    st.markdown(
-        f"<h3 style='text-align:center'>Mã bó chỉ: <code>{bundle.code}</code></h3>",
-        unsafe_allow_html=True,
-    )
-    _, c_img, _ = st.columns([2, 1, 2])
-    with c_img:
-        if bundle.disp_roi.size > 0:
-            st.image(bundle.disp_roi, use_container_width=True)
+    head, close = st.columns([3, 1])
+    head.markdown(f"### Mã bó chỉ: `{bundle.code}`")
+    if close.button("Đóng", key=widget_key("close", res.filename), use_container_width=True):
+        st.session_state.selected = None
+        st.session_state.selected_color = None
+        st.rerun()
 
-    st.markdown(
-        "<div style='text-align:center;color:#888;font-size:.85rem'>"
-        "Bấm một ô màu để xem mã</div>",
-        unsafe_allow_html=True,
-    )
+    if bundle.disp_roi.size > 0:
+        st.image(bundle.disp_roi, width=130)
+
+    st.caption("Bấm một ô màu để xem mã")
     cols = st.columns(3)
     css = []
     for col, (key, _, _) in zip(cols, VERSIONS):
@@ -173,29 +170,24 @@ def render_detail(res, bundle) -> None:
                     "rgb": rgb,
                 }
                 st.rerun()
+            st.caption(key)
     st.markdown(f"<style>{''.join(css)}</style>", unsafe_allow_html=True)
 
     info = st.session_state.selected_color
     if info:
         rgb = info["rgb"]
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.caption("HEX")
-            st.code(info["hex"], language=None)
-        with c2:
-            st.caption("RGB")
-            st.code(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})", language=None)
-        with c3:
-            st.caption("R, G, B")
-            st.code(f"{rgb[0]}, {rgb[1]}, {rgb[2]}", language=None)
+        st.markdown("---")
+        st.markdown(
+            f'<div class="swatch" style="background:{info["hex"]};height:56px;"></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("HEX")
+        st.code(info["hex"], language=None)
+        st.caption("RGB")
+        st.code(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})", language=None)
+        st.code(f"{rgb[0]}, {rgb[1]}, {rgb[2]}", language=None)
     else:
         st.info("Chọn một trong 3 ô màu bên trên.")
-
-    _, c_close, _ = st.columns([2, 1, 2])
-    if c_close.button("Đóng", key=widget_key("close", res.filename), use_container_width=True):
-        st.session_state.selected = None
-        st.session_state.selected_color = None
-        st.rerun()
 
 
 def click_image(img, key):
@@ -209,7 +201,7 @@ def click_image(img, key):
 st.title("🧵 Thread Color Extractor")
 st.caption(
     "Tải nhiều ảnh hàng chỉ, nhập mã đầu hàng cho từng ảnh. "
-    "Bấm một bó chỉ để xem chi tiết ngay bên dưới; bấm ô màu để lấy HEX / RGB."
+    "Bấm một bó chỉ trên ảnh để xem chi tiết bên phải; bấm ô màu để lấy HEX / RGB."
 )
 
 with st.sidebar:
@@ -311,27 +303,18 @@ if jobs:
         for job in ok_jobs:
             res = job["result"]
             st.markdown("---")
-            st.markdown(
-                f"<h3 style='text-align:center'>{res.filename} · mã đầu {res.start_code}</h3>",
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                f"<div style='text-align:center;color:#888;font-size:.85rem'>"
+            st.subheader(f"{res.filename}  ·  mã đầu {res.start_code}")
+            st.caption(
                 f"pitch = {res.pitch:.1f}px · bó đầu x = {res.a0:.1f} · "
-                f"WB_GAIN = {np.round(res.wb_gain, 3).tolist()} · {len(res.bundles)} bó</div>",
-                unsafe_allow_html=True,
+                f"WB_GAIN = {np.round(res.wb_gain, 3).tolist()} · {len(res.bundles)} bó"
             )
             sel_idx = sel["idx"] if sel and sel["file"] == res.filename else None
             img = draw_overlay(res, sel_idx)
 
-            _, mid, _ = st.columns([1, 10, 1])
-            with mid:
+            left, right = st.columns([1.7, 1], gap="large")
+            with left:
                 if HAS_CLICK:
-                    st.markdown(
-                        "<div style='text-align:center;color:#888;font-size:.85rem'>"
-                        "👆 Bấm vào một bó chỉ trên ảnh để xem chi tiết</div>",
-                        unsafe_allow_html=True,
-                    )
+                    st.caption("👆 Bấm vào một bó chỉ trên ảnh để xem chi tiết bên phải")
                     val = click_image(
                         img, widget_key("img", res.filename, st.session_state.run_id)
                     )
@@ -345,14 +328,16 @@ if jobs:
                 else:
                     st.image(img, use_container_width=True)
 
-                if sel_idx is not None:
-                    st.markdown("---")
-                    render_detail(res, res.bundles[sel_idx])
-
                 if show_grid or not HAS_CLICK:
                     with st.expander("Lưới bó chỉ", expanded=not HAS_CLICK):
                         render_bundle_grid(res, cols_n=cols_n)
 
-    render_jobs(14)
+            with right:
+                if sel_idx is not None:
+                    render_detail(res, res.bundles[sel_idx])
+                else:
+                    st.info("Bấm vào một bó chỉ trên ảnh, thông tin sẽ hiện ở đây.")
+
+    render_jobs(8)
 elif not uploaded:
     st.info("Hãy tải một hoặc nhiều ảnh hàng chỉ để bắt đầu.")
