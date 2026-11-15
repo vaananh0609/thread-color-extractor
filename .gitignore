@@ -1,0 +1,10 @@
+@"
+__pycache__/
+*.pyc
+.venv/
+*.csv
+*.crdownload
+*.zip
+*.7z
+thread-color/
+"@ | Set-Content .gitignore
