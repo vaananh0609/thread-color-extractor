@@ -134,11 +134,20 @@ def render_bundle_grid(res, cols_n: int = 14, thumb_w: int = 56) -> None:
 
 
 def render_detail(res, bundle) -> None:
-    st.markdown(f"### Mã bó chỉ: `{bundle.code}`")
-    if bundle.disp_roi.size > 0:
-        st.image(bundle.disp_roi, width=140)
+    st.markdown(
+        f"<h3 style='text-align:center'>Mã bó chỉ: <code>{bundle.code}</code></h3>",
+        unsafe_allow_html=True,
+    )
+    _, c_img, _ = st.columns([2, 1, 2])
+    with c_img:
+        if bundle.disp_roi.size > 0:
+            st.image(bundle.disp_roi, use_container_width=True)
 
-    st.caption("Bấm một ô màu để xem mã")
+    st.markdown(
+        "<div style='text-align:center;color:#888;font-size:.85rem'>"
+        "Bấm một ô màu để xem mã</div>",
+        unsafe_allow_html=True,
+    )
     cols = st.columns(3)
     css = []
     for col, (key, _, _) in zip(cols, VERSIONS):
@@ -169,31 +178,44 @@ def render_detail(res, bundle) -> None:
     info = st.session_state.selected_color
     if info:
         rgb = info["rgb"]
-        st.markdown("---")
-        st.markdown(
-            f'<div class="swatch" style="background:{info["hex"]};height:56px;"></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("HEX — bấm icon copy góc phải")
-        st.code(info["hex"], language=None)
-        st.caption("RGB")
-        st.code(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})", language=None)
-        st.code(f"{rgb[0]}, {rgb[1]}, {rgb[2]}", language=None)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.caption("HEX")
+            st.code(info["hex"], language=None)
+        with c2:
+            st.caption("RGB")
+            st.code(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})", language=None)
+        with c3:
+            st.caption("R, G, B")
+            st.code(f"{rgb[0]}, {rgb[1]}, {rgb[2]}", language=None)
     else:
         st.info("Chọn một trong 3 ô màu bên trên.")
+
+    _, c_close, _ = st.columns([2, 1, 2])
+    if c_close.button("Đóng", key=widget_key("close", res.filename), use_container_width=True):
+        st.session_state.selected = None
+        st.session_state.selected_color = None
+        st.rerun()
+
+
+def click_image(img, key):
+    """Ảnh bấm được, tự co vừa chiều rộng cột."""
+    try:
+        return streamlit_image_coordinates(img, key=key, use_column_width="always")
+    except TypeError:  # bản thư viện cũ không có use_column_width
+        return streamlit_image_coordinates(img, key=key, width=1000)
 
 
 st.title("🧵 Thread Color Extractor")
 st.caption(
     "Tải nhiều ảnh hàng chỉ, nhập mã đầu hàng cho từng ảnh. "
-    "Bấm một bó chỉ để xem chi tiết bên phải; bấm ô màu để lấy HEX / RGB."
+    "Bấm một bó chỉ để xem chi tiết ngay bên dưới; bấm ô màu để lấy HEX / RGB."
 )
 
 with st.sidebar:
     st.header("Cấu hình")
     n_bundles = st.number_input("Số bó mỗi hàng", min_value=1, max_value=80, value=28, step=1)
     use_wb = st.checkbox("Cân bằng trắng (WB)", value=True)
-    img_w = st.slider("Độ rộng ảnh gốc (px)", 500, 1600, 900, 50)
     show_grid = st.checkbox("Hiện lưới bó chỉ nhỏ", value=not HAS_CLICK)
 
 uploaded = st.file_uploader(
@@ -235,6 +257,15 @@ if uploaded:
             )
         configs.append((f, int(start)))
 
+        processed_names = {
+            j["result"].filename for j in st.session_state.jobs if j["ok"]
+        }
+        if f.name not in processed_names:
+            _, mid_prev, _ = st.columns([1, 10, 1])
+            with mid_prev:
+                st.image(Image.open(io.BytesIO(f.getvalue())).convert("RGB"),
+                         use_container_width=True)
+
     run = st.button("Xử lý ảnh", type="primary")
     if run:
         jobs = []
@@ -257,6 +288,7 @@ if uploaded:
         st.session_state.last_click = {}
         st.session_state.selected = None
         st.session_state.selected_color = None
+        st.rerun()
 
 jobs = st.session_state.jobs
 if jobs:
@@ -274,56 +306,53 @@ if jobs:
             mime="text/csv",
         )
 
-    selected = st.session_state.selected
-    sel_res, sel_bundle = find_bundle(ok_jobs, selected)
-    split = sel_bundle is not None
-
     def render_jobs(cols_n: int) -> None:
         sel = st.session_state.selected
         for job in ok_jobs:
             res = job["result"]
             st.markdown("---")
-            st.subheader(f"{res.filename}  ·  mã đầu {res.start_code}")
-            st.caption(
+            st.markdown(
+                f"<h3 style='text-align:center'>{res.filename} · mã đầu {res.start_code}</h3>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div style='text-align:center;color:#888;font-size:.85rem'>"
                 f"pitch = {res.pitch:.1f}px · bó đầu x = {res.a0:.1f} · "
-                f"WB_GAIN = {np.round(res.wb_gain, 3).tolist()} · {len(res.bundles)} bó"
+                f"WB_GAIN = {np.round(res.wb_gain, 3).tolist()} · {len(res.bundles)} bó</div>",
+                unsafe_allow_html=True,
             )
             sel_idx = sel["idx"] if sel and sel["file"] == res.filename else None
             img = draw_overlay(res, sel_idx)
 
-            if HAS_CLICK:
-                st.caption("👆 Bấm vào một bó chỉ trên ảnh để xem chi tiết")
-                val = streamlit_image_coordinates(
-                    img,
-                    width=img_w,
-                    key=widget_key("img", res.filename, st.session_state.run_id),
-                )
-                if val and val != st.session_state.last_click.get(res.filename):
-                    st.session_state.last_click[res.filename] = val
-                    x_orig = val["x"] * (img.width / val["width"])
-                    idx = int(np.argmin([abs(b.x - x_orig) for b in res.bundles]))
-                    st.session_state.selected = {"file": res.filename, "idx": idx}
-                    st.session_state.selected_color = None
-                    st.rerun()
-            else:
-                st.image(img, width=img_w)
+            _, mid, _ = st.columns([1, 10, 1])
+            with mid:
+                if HAS_CLICK:
+                    st.markdown(
+                        "<div style='text-align:center;color:#888;font-size:.85rem'>"
+                        "👆 Bấm vào một bó chỉ trên ảnh để xem chi tiết</div>",
+                        unsafe_allow_html=True,
+                    )
+                    val = click_image(
+                        img, widget_key("img", res.filename, st.session_state.run_id)
+                    )
+                    if val and val != st.session_state.last_click.get(res.filename):
+                        st.session_state.last_click[res.filename] = val
+                        x_orig = val["x"] * (img.width / val["width"])
+                        idx = int(np.argmin([abs(b.x - x_orig) for b in res.bundles]))
+                        st.session_state.selected = {"file": res.filename, "idx": idx}
+                        st.session_state.selected_color = None
+                        st.rerun()
+                else:
+                    st.image(img, use_container_width=True)
 
-            if show_grid or not HAS_CLICK:
-                with st.expander("Lưới bó chỉ", expanded=not HAS_CLICK):
-                    render_bundle_grid(res, cols_n=cols_n)
+                if sel_idx is not None:
+                    st.markdown("---")
+                    render_detail(res, res.bundles[sel_idx])
 
-    if split:
-        left, right = st.columns([1.6, 1])
-        with left:
-            render_jobs(8)
-        with right:
-            st.markdown("---")
-            if st.button("Đóng", use_container_width=True):
-                st.session_state.selected = None
-                st.session_state.selected_color = None
-                st.rerun()
-            render_detail(sel_res, sel_bundle)
-    else:
-        render_jobs(14)
+                if show_grid or not HAS_CLICK:
+                    with st.expander("Lưới bó chỉ", expanded=not HAS_CLICK):
+                        render_bundle_grid(res, cols_n=cols_n)
+
+    render_jobs(14)
 elif not uploaded:
     st.info("Hãy tải một hoặc nhiều ảnh hàng chỉ để bắt đầu.")
